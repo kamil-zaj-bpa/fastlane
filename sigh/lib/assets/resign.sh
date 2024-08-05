@@ -873,14 +873,18 @@ function resign {
         /usr/bin/codesign ${VERBOSE} --generate-entitlement-der -f -s "$CERTIFICATE" --entitlements "$PATCHED_ENTITLEMENTS" "$APP_PATH"
         checkStatus
     else
-log "Extracting entitlements from provisioning profile"
+        log "Extracting entitlements from provisioning profile"
 PlistBuddy -x -c "Print Entitlements" "$TEMP_DIR/profile.plist" > "$TEMP_DIR/newEntitlements"
 checkStatus
 
-# Remove NDEF from the entitlements
-log "Removing NDEF from entitlements"
-PlistBuddy -c "Delete :com.apple.developer.nfc.readersession.formats:0" "$TEMP_DIR/newEntitlements"
-checkStatus
+# Check if the NDEF key exists and remove it if it does
+log "Removing NDEF from entitlements if it exists"
+if /usr/libexec/PlistBuddy -c "Print :com.apple.developer.nfc.readersession.formats" "$TEMP_DIR/newEntitlements" &>/dev/null; then
+  /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.nfc.readersession.formats:0" "$TEMP_DIR/newEntitlements"
+  checkStatus
+else
+  log "NDEF key does not exist in entitlements, skipping deletion"
+fi
 
 log "Resigning application using certificate: '$CERTIFICATE'"
 log "and entitlements from provisioning profile: $NEW_PROVISION"
@@ -893,7 +897,6 @@ fi
 # shellcheck disable=SC2086
 /usr/bin/codesign ${VERBOSE} --generate-entitlement-der ${KEYCHAIN_FLAG} -f -s "$CERTIFICATE" --entitlements "$TEMP_DIR/newEntitlements" "$APP_PATH"
 checkStatus
-
     fi
 
     # Remove the temporary files if they were created before generating ipa
