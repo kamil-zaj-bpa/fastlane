@@ -873,19 +873,27 @@ function resign {
         /usr/bin/codesign ${VERBOSE} --generate-entitlement-der -f -s "$CERTIFICATE" --entitlements "$PATCHED_ENTITLEMENTS" "$APP_PATH"
         checkStatus
     else
-        log "Extracting entitlements from provisioning profile"
-        PlistBuddy -x -c "Print Entitlements" "$TEMP_DIR/profile.plist" > "$TEMP_DIR/newEntitlements"
-        checkStatus
-        log "Resigning application using certificate: '$CERTIFICATE'"
-        log "and entitlements from provisioning profile: $NEW_PROVISION"
-        if [[ "${XCODE_VERSION/.*/}" -lt 10 ]]; then
-            log "Creating an archived-expanded-entitlements.xcent file for Xcode 9 builds or earlier"
-            cp -- "$TEMP_DIR/newEntitlements" "$APP_PATH/archived-expanded-entitlements.xcent"
-        fi
-        # Must not quote KEYCHAIN_FLAG because it needs to be unwrapped and passed to codesign with spaces
-        # shellcheck disable=SC2086
-        /usr/bin/codesign ${VERBOSE} --generate-entitlement-der ${KEYCHAIN_FLAG} -f -s "$CERTIFICATE" --entitlements "$TEMP_DIR/newEntitlements" "$APP_PATH"
-        checkStatus
+log "Extracting entitlements from provisioning profile"
+PlistBuddy -x -c "Print Entitlements" "$TEMP_DIR/profile.plist" > "$TEMP_DIR/newEntitlements"
+checkStatus
+
+# Remove NDEF from the entitlements
+log "Removing NDEF from entitlements"
+PlistBuddy -c "Delete :com.apple.developer.nfc.readersession.formats:0" "$TEMP_DIR/newEntitlements"
+checkStatus
+
+log "Resigning application using certificate: '$CERTIFICATE'"
+log "and entitlements from provisioning profile: $NEW_PROVISION"
+if [[ "${XCODE_VERSION/.*/}" -lt 10 ]]; then
+    log "Creating an archived-expanded-entitlements.xcent file for Xcode 9 builds or earlier"
+    cp -- "$TEMP_DIR/newEntitlements" "$APP_PATH/archived-expanded-entitlements.xcent"
+fi
+
+# Must not quote KEYCHAIN_FLAG because it needs to be unwrapped and passed to codesign with spaces
+# shellcheck disable=SC2086
+/usr/bin/codesign ${VERBOSE} --generate-entitlement-der ${KEYCHAIN_FLAG} -f -s "$CERTIFICATE" --entitlements "$TEMP_DIR/newEntitlements" "$APP_PATH"
+checkStatus
+
     fi
 
     # Remove the temporary files if they were created before generating ipa
